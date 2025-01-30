@@ -1,12 +1,12 @@
 pip install poetry
 
-poetry run pip install jupyterlab
+poetry add --group dev jupyterlab ipykernel
 
 poetry install
 
 poetry run python -m ipykernel install --user --name=poetry-root-env
 
-poetry run pip install --pre torch torchvision torchaudio -f https://download.pytorch.org/whl/nightly/cu110/torch_nightly.html
+poetry run pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 
 if (!(Test-Path -Path "./data")) {
   New-Item -ItemType Directory -Path "./data"
