@@ -6,7 +6,7 @@ from . import data, metrics, utils
 from tqdm import tqdm
 from pathlib import Path
 
-def train_model(model, criterion, optimizer, scheduler_lr, device, loaders, tensor_writer, mappings, class_dicts, class_weights, n_epochs=25):
+def train_model(model, criterion, optimizer, scheduler_lr, device, loaders, tensor_writer, mappings, class_dicts, n_epochs=25):
     """Fine-tune the model and returns it
     Args:
         model: The model to be trained.
@@ -22,8 +22,6 @@ def train_model(model, criterion, optimizer, scheduler_lr, device, loaders, tens
     Returns:
         The trained model.
     """
-    # unpack_loss_coefs
-    race_weight: float = class_weights['race']
     # Whether to use learning rate scheduler
     use_lr_scheduler = False
 
@@ -47,7 +45,6 @@ def train_model(model, criterion, optimizer, scheduler_lr, device, loaders, tens
     for epoch in range(1, n_epochs):
         # Define train and each ANN head losses to compare if it is decreasing during training process
         train_loss = .0
-        age_train_loss, race_train_loss, gender_train_loss = .0, .0, .0
 
         model.train()
 
@@ -66,8 +63,10 @@ def train_model(model, criterion, optimizer, scheduler_lr, device, loaders, tens
 
             # get model's predictions
             output = model(image)
-            # predict age, gender, race labels
+            # predict race label
             race_pred = output['race_pred'].to(device)
+
+            race_loss = -1
             
             # calculate loss[CCE or BCE]
             if cce_mark:
@@ -79,17 +78,13 @@ def train_model(model, criterion, optimizer, scheduler_lr, device, loaders, tens
                 # Then calculate the loss
                 race_loss = criterion(race_pred, race_dummy)
                 
-            # total loss and back propagation
-            loss = race_loss * race_weight
-
             # add the loss of age, race, gender heads to their total losses of the epoch
-            race_train_loss += race_loss
-            train_loss += loss 
+            train_loss += race_loss 
 
             # Clear the gradients of all parameters
             optimizer.zero_grad()
             # Compute the gradients of the loss function with respect to the model's parameters
-            loss.backward()
+            race_loss.backward()
             # optimization step
             optimizer.step()
 
@@ -104,7 +99,7 @@ def train_model(model, criterion, optimizer, scheduler_lr, device, loaders, tens
 
         # Every epoch log metrics and losses to the tensorboard to track whether the model is training or not
         
-        losses = {'loss' : train_loss,'race' : race_train_loss}
+        losses = {'loss' : train_loss,'race' : race_loss}
         losses = {k : v / len(train_loader) for (k, v) in losses.items()}
         labels = {'race' : all_race_labels}
         preds = {'race' : all_race_preds}
@@ -124,12 +119,11 @@ def train_model(model, criterion, optimizer, scheduler_lr, device, loaders, tens
             valid_race_labels = []
 
             valid_loss = .0
-            valid_race_loss = .0
 
             # Iterate over the batches of the validation dataloader
             for sample_batched in tqdm(test_loader):
                 # read every element of the sample and send it to device[GPU as it is expected]
-                image, = sample_batched['age'].to(device)
+                image = sample_batched['image'].float().to(device)
                 race = sample_batched['race'].to(device)
 
                 # get model's predictions
@@ -137,6 +131,8 @@ def train_model(model, criterion, optimizer, scheduler_lr, device, loaders, tens
 
                 # predict race label
                 race_pred = output['race_pred'].to(device)
+
+                race_loss = -1
 
                 # calculate loss[CCE or BCE]
                 if cce_mark:
@@ -148,12 +144,8 @@ def train_model(model, criterion, optimizer, scheduler_lr, device, loaders, tens
                     # Then calculate the loss
                     race_loss = criterion(race_pred, race_dummy)
 
-                # total loss and back propagation
-                loss = race_loss * race_weight
-
                 # add the loss of age, race, gender heads to their total losses of the epoch
-                valid_loss += loss.item()
-                valid_race_loss += race_loss
+                valid_loss += race_loss.item()
 
                 # Get Race prediction 
                 _, race_predicted = torch.max(torch.softmax(output['race_pred'].data, dim=1), 1)
@@ -165,7 +157,7 @@ def train_model(model, criterion, optimizer, scheduler_lr, device, loaders, tens
                 valid_race_labels.extend([i.item() for i in race])
 
             # Every epoch log metrics and losses to the tensorboard to track whether the model is training or not
-            losses = {'loss' : valid_loss, 'race' : valid_race_loss}
+            losses = {'loss' : valid_loss, 'race' : race_loss}
             losses = {k : v / len(test_loader) for (k, v) in losses.items()}
             labels = {'race' : valid_race_labels}
             preds = {'race' : valid_race_preds}

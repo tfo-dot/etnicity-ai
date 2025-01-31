@@ -20,7 +20,7 @@ def create_cm_df(cf, classes):
     """
     return pd.DataFrame(cf / np.sum(cf, axis=1)[:, None], index = [i for i in classes], columns = [i for i in classes])
 
-def create_cfs(ages, genders, races, mappings):
+def create_cfs(races, mappings):
     """
     Creates a confusion matrix plot for each class.
 
@@ -128,11 +128,9 @@ def log_tensorboard(board, losses, labels, preds, mappings, epoch, mode='Train')
     race_loss = losses['race']
     race_labels = labels['race']
     race_preds = preds['race']
-    
-    accuracy_str += f'Race accuracy = {accuracy_score(race_labels, race_preds)}\t'
-    
+        
     print(f'Epoch = {epoch}, Loss = {loss}')
-    print(accuracy_str)
+    print(f'Race accuracy = {accuracy_score(race_labels, race_preds)}\t')
     
     board.add_scalar(f'{mode} Loss', loss, epoch)
     board.add_scalar(f'Race {mode} Loss', race_loss, epoch)
